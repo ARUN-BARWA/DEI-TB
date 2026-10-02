@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.env
+.env.*
+# Local market data and model artefacts never go in git.
+data_store/
+outputs/
+checkpoints/
+*.parquet
+*.pt
+*.safetensors
+reports/*.csv
+!reports/.gitkeep

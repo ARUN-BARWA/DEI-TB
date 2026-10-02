@@ -1,0 +1,16 @@
+# Install PyTorch first, matching your GPU driver. For a GTX 1650 (CUDA 12.x driver):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+# CPU-only:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
+numpy
+pandas>=2.0
+pyarrow
+pyyaml
+# Kronos runtime dependencies (third_party/Kronos/requirements.txt)
+einops==0.8.1
+huggingface_hub==0.33.1
+safetensors==0.6.2
+tqdm
+# Dev
+pytest

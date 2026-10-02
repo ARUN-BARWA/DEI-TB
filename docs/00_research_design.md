@@ -1,6 +1,7 @@
 # DEI-TB — Research Design (Phase 0)
 
-Status: **proposal, awaiting approval before Phase 1.** No trading code exists yet.
+Status: **approved; Phase 1 done** (see `docs/01_kronos_study.md`). Decisions from your answers are under
+"Decisions" at the end.
 
 Sources actually inspected for this document:
 
@@ -97,11 +98,9 @@ Licence: MIT.
 
 ### 1.6 Limitations relevant to us
 
-1. **Pretraining contamination.** Kronos was pretrained on data from 45+ exchanges, almost certainly including major
-   crypto pairs, up to a cutoff I could not verify (arXiv was blocked). **Any backtest period before the
-   pretraining-data cutoff is potentially in-sample for Kronos.** The clean Kronos test is only on data after
-   that cutoff. Phase 1 action: get the exact cutoff from the paper (arXiv 2508.02739) and treat it as a hard lower
-   bound for Kronos test windows.
+1. **Pretraining contamination.** Kronos was pretrained on 12B+ K-line records from 45+ exchanges including crypto,
+   with a corpus that **ends June 2024** (confirmed in Phase 1). Any period up to 2024-06-30 is potentially
+   in-sample for Kronos, so **Kronos test windows start 2024-07-01 or later.**
 2. Univariate OHLCVA only: no funding, OI, basis, order book or cross-asset input. Those must come from separate
    models.
 3. The objective is token likelihood, not trading utility. A good CE/MSE does not imply sign accuracy where it matters
@@ -478,15 +477,15 @@ because microstructure history only accrues from that day.
 
 ---
 
-## Open questions for you
+## Decisions (answers to the Phase 0 questions)
 
-1. **Compute:** is a GPU available (local or cloud)? This decides whether 1m/5m Kronos research is practical.
-2. **Symbols:** BTCUSD and ETHUSD perpetuals first? Any others?
-3. **Network:** this build environment blocks `api.india.delta.exchange`, `docs.delta.exchange`, `huggingface.co`
-   and `arxiv.org`. Data download and model weights need those hosts allowed, or these steps must run on your machine.
-4. **Account:** your Delta India fee tier, and whether you have a testnet account for Phase 12.
-5. **Off-venue data:** OK to use Binance/Bybit perp history *only* as auxiliary research data (e.g. longer history
-   for fine-tuning) if Delta India history turns out to be short? Final validation would remain on Delta data.
+1. **Compute:** local GTX 1650 (4 GB). Use Kronos-small/mini, stride decisions at 1m/5m, and favour single-pass
+   embeddings there.
+2. **Symbols:** BTCUSD, ETHUSD, SOLUSD (the more volatile leg).
+3. **Where it runs:** your machine, on **your local data files**. Phase 2 becomes *local data ingest + validation*
+   instead of an API downloader. The Delta API adapter and live recorder move to Phases 12–13, so microstructure
+   research depends on what your files contain.
+4. **Other sources:** free/open only (e.g. Binance public archive), auxiliary research only.
 
 ## References (cited from knowledge; could not re-fetch from this environment)
 

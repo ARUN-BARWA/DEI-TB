@@ -1,0 +1,44 @@
+# DEI-TB settings. Secrets (DELTA_API_KEY / DELTA_API_SECRET) are never stored here:
+# they are read from the environment only.
+
+# SIGNAL_ONLY | PAPER | LIVE. SIGNAL_ONLY never places orders.
+mode: SIGNAL_ONLY
+
+# Global kill switch. Trading is allowed only when this is true AND the environment
+# variable TRADING_ENABLED is exactly "true". Anything else means no orders.
+trading_enabled: false
+
+symbols:
+  - BTCUSD
+  - ETHUSD
+  - SOLUSD   # the "smaller, more volatile" leg; swap for DOGEUSD/XRPUSD if preferred
+
+# Research timeframes, in the order they will be studied (cheapest Kronos cost first).
+timeframes: [1h, 15m, 4h, 5m, 1m]
+
+data:
+  # Root for normalised local data (Parquet). Raw files stay wherever you keep them.
+  root: ./data_store
+
+kronos:
+  # Kronos-mini: 4.1M params, context 2048. Kronos-small: 24.7M, context 512.
+  # Kronos-base (102M) runs on a 4 GB GTX 1650 for inference but is slow; fine-tune small/mini.
+  model_id: NeoQuasar/Kronos-small
+  tokenizer_id: NeoQuasar/Kronos-Tokenizer-base
+  max_context: 512
+  lookback: 400
+  device: auto          # auto | cpu | cuda | cuda:0 | mps
+  n_samples: 16
+  temperature: 1.0
+  top_p: 0.9
+  top_k: 0
+  clip: 5.0
+  # Kronos pretraining corpus ends June 2024: data before this date may be in-sample for Kronos.
+  # Kronos test windows must start after it.
+  pretrain_cutoff: "2024-06-30"
+
+costs:
+  # Delta India perpetuals, before GST. [verify against your account tier]
+  taker_fee: 0.0005
+  maker_fee: 0.0002
+  gst_rate: 0.18

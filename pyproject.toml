@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading_bot"
+version = "0.1.0"
+description = "Research-grade crypto trading system for Delta Exchange India using Kronos"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+include = ["trading_bot*"]
+
+[tool.setuptools.package-data]
+"trading_bot.config" = ["*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
