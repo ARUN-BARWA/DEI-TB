@@ -8,6 +8,7 @@ in this repository can place an order yet.
 
 - Design: [`docs/00_research_design.md`](docs/00_research_design.md)
 - Phase 1 (Kronos study): [`docs/01_kronos_study.md`](docs/01_kronos_study.md)
+- Phase 2 (tick data pipeline): [`docs/02_data_pipeline.md`](docs/02_data_pipeline.md)
 
 ## Setup
 
@@ -36,6 +37,20 @@ python scripts/kronos_benchmark.py
 python scripts/kronos_probe.py --file path/to/BTCUSD_1h.csv
 python scripts/kronos_probe.py --file path/to/BTCUSD_1h.csv --at "2025-03-01 12:00" --n-samples 32
 ```
+
+## Phase 2: ingest your Delta trade archives
+
+```bash
+# Folder with futures-trades-monthly-<SYMBOL>-<YYYY-MM>.zip files (searched recursively; never modified)
+python scripts/ingest_trades.py --src path/to/delta_trades
+# -> data_store/trades, data_store/bars/{1m,5m,15m,1h,4h}, data_store/reports/summary.csv + <SYMBOL>.json
+
+# Verify the timestamps are UTC against a free reference file, e.g. Binance
+# https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1m/BTCUSDT-1m-2026-09.zip
+python scripts/check_clock.py --symbol BTCUSD --ref BTCUSDT-1m-2026-09.zip
+```
+
+Re-running `ingest_trades.py` only processes new or changed files (`--force` re-does everything).
 
 ## Safety
 

@@ -486,6 +486,8 @@ because microstructure history only accrues from that day.
    instead of an API downloader. The Delta API adapter and live recorder move to Phases 12–13, so microstructure
    research depends on what your files contain.
 4. **Other sources:** free/open only (e.g. Binance public archive), auxiliary research only.
+5. **Your data** (Phase 2): Delta tick trades with aggressor side, 8 symbols, 2026-01 → 2026-09. There is no order
+   book, funding, OI or mark price. Details and consequences: `docs/02_data_pipeline.md`.
 
 ## References (cited from knowledge; could not re-fetch from this environment)
 

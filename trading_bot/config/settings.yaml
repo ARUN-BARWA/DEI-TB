@@ -8,10 +8,12 @@ mode: SIGNAL_ONLY
 # variable TRADING_ENABLED is exactly "true". Anything else means no orders.
 trading_enabled: false
 
+# Research focus. All symbols in your trade archives are ingested (DOGEUSD, PEPEUSD, MONUSD,
+# PNUTUSD, ZROUSD too); the volatile leg is chosen from data_store/reports/summary.csv by liquidity.
 symbols:
   - BTCUSD
   - ETHUSD
-  - SOLUSD   # the "smaller, more volatile" leg; swap for DOGEUSD/XRPUSD if preferred
+  - SOLUSD
 
 # Research timeframes, in the order they will be studied (cheapest Kronos cost first).
 timeframes: [1h, 15m, 4h, 5m, 1m]
