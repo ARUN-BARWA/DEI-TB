@@ -9,6 +9,7 @@ in this repository can place an order yet.
 - Design: [`docs/00_research_design.md`](docs/00_research_design.md)
 - Phase 1 (Kronos study): [`docs/01_kronos_study.md`](docs/01_kronos_study.md)
 - Phase 2 (tick data pipeline): [`docs/02_data_pipeline.md`](docs/02_data_pipeline.md)
+- Phase 3 (features, labels, splits): [`docs/03_research_dataset.md`](docs/03_research_dataset.md), [`docs/features.md`](docs/features.md)
 
 ## Setup
 
@@ -51,6 +52,14 @@ python scripts/check_clock.py --symbol BTCUSD --ref BTCUSDT-1m-2026-09.zip
 ```
 
 Re-running `ingest_trades.py` only processes new or changed files (`--force` re-does everything).
+
+## Phase 3: research datasets
+
+```bash
+python scripts/build_dataset.py            # symbols x timeframes from settings.yaml
+# -> data_store/datasets/<tf>/<SYMBOL>.parquet, data_store/reports/cost_hurdle.csv, folds.csv
+python scripts/gen_feature_docs.py         # after adding/changing a feature (a test checks docs/features.md)
+```
 
 ## Safety
 

@@ -35,7 +35,7 @@ def test_mean_of_paths_matches_upstream_predict(tiny_kronos, ohlcv):
     )
 
     wrapper = KronosWrapper(model, tokenizer, device="cpu", max_context=512)
-    paths = wrapper.sample_paths([w], [x_ts], [y_ts], pred_len=PRED_LEN, n_samples=n, top_p=0.9, seed=123)
+    paths = wrapper.sample_paths([w], [x_ts], [y_ts], pred_len=PRED_LEN, n_samples=n, top_p=0.9, seed=123, max_batch=None)
 
     assert paths.shape == (1, n, PRED_LEN, 6)
     np.testing.assert_allclose(paths[0].mean(axis=0), upstream.to_numpy(), rtol=1e-5, atol=0)
@@ -150,3 +150,20 @@ def test_summarize_paths_statistics():
 def test_future_timestamps():
     ts = future_timestamps(pd.Timestamp("2025-01-01 00:55", tz="UTC"), "5min", 3)
     assert list(ts) == list(pd.date_range("2025-01-01 01:00", periods=3, freq="5min", tz="UTC"))
+
+
+def test_chunked_embedding_equals_single_batch(tiny_kronos):
+    model, tokenizer = tiny_kronos
+    df = make_ohlcv(150, seed=4)
+    wins = [_window(df, end) for end in range(60, 150, 9)]
+    dfs, xs = [w for w, _, _ in wins], [x for _, x, _ in wins]
+    one = KronosWrapper(model, tokenizer, device="cpu", max_batch_rows=None).embed(dfs, xs)
+    chunked = KronosWrapper(model, tokenizer, device="cpu", max_batch_rows=3).embed(dfs, xs)
+    np.testing.assert_allclose(one.hidden_last, chunked.hidden_last, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(one.s1_entropy, chunked.s1_entropy, rtol=1e-5, atol=1e-6)
+
+
+def test_limit_vram_is_noop_on_cpu():
+    from trading_bot.models.kronos_model import limit_vram
+
+    assert limit_vram("cpu") is None

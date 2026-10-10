@@ -30,13 +30,14 @@ TOKENIZER_FOR = {
 BARS_PER_YEAR = {"1m": 525_600, "5m": 105_120, "15m": 35_040, "1h": 8_760, "4h": 2_190}
 
 
-def _load(model_id: str, device: str, tiny: bool) -> KronosWrapper:
+def _load(model_id: str, device: str, tiny: bool, headroom: int | None, max_rows: int | None) -> KronosWrapper:
     if tiny:
         from tests.conftest import make_tiny_kronos
 
         model, tokenizer = make_tiny_kronos()
-        return KronosWrapper(model, tokenizer, device=device, max_context=2048)
-    return KronosWrapper.from_pretrained(model_id, TOKENIZER_FOR.get(model_id, "NeoQuasar/Kronos-Tokenizer-base"), device=device)
+        return KronosWrapper(model, tokenizer, device=device, max_context=2048, vram_headroom_mb=headroom, max_batch_rows=max_rows)
+    return KronosWrapper.from_pretrained(model_id, TOKENIZER_FOR.get(model_id, "NeoQuasar/Kronos-Tokenizer-base"),
+                                         device=device, vram_headroom_mb=headroom, max_batch_rows=max_rows)
 
 
 def _sync(device: str) -> None:
@@ -52,7 +53,10 @@ def run(args: argparse.Namespace) -> pd.DataFrame:
     rows = []
     models = ["tiny-random"] if args.tiny else args.models
     for model_id in models:
-        wrapper = _load(model_id, device, args.tiny)
+        headroom = None if args.vram_headroom_mb < 0 else args.vram_headroom_mb
+        wrapper = _load(model_id, device, args.tiny, headroom, args.max_batch_rows or None)
+        if wrapper.vram_fraction is not None:
+            print(f"{model_id}: PyTorch capped at {wrapper.vram_fraction:.0%} of VRAM")
         for ctx in args.contexts:
             if ctx > wrapper.max_context:
                 continue
@@ -67,6 +71,7 @@ def run(args: argparse.Namespace) -> pd.DataFrame:
                            "n_samples": n, "batch_windows": args.batch, "mode": "sample"}
                     try:
                         if device.startswith("cuda"):
+                            torch.cuda.empty_cache()  # do not let earlier configs' cached blocks leak into this one
                             torch.cuda.reset_peak_memory_stats()
                         wrapper.sample_paths(dfs, x_ts, y_ts, pred_len=pred_len, n_samples=n, seed=0)  # warm-up
                         _sync(device)
@@ -77,6 +82,7 @@ def run(args: argparse.Namespace) -> pd.DataFrame:
                         sec_per_decision = (time.perf_counter() - t0) / args.repeats / args.batch
                         rec["ms_per_decision"] = round(sec_per_decision * 1000, 2)
                         rec["peak_vram_mb"] = round(torch.cuda.max_memory_allocated() / 2**20) if device.startswith("cuda") else None
+                        rec["peak_reserved_mb"] = round(torch.cuda.max_memory_reserved() / 2**20) if device.startswith("cuda") else None
                         for tf, bars in BARS_PER_YEAR.items():
                             rec[f"hours_per_year_{tf}"] = round(sec_per_decision * bars / 3600, 1)
                     except torch.cuda.OutOfMemoryError:
@@ -109,7 +115,9 @@ def main() -> None:
     p.add_argument("--contexts", nargs="+", type=int, default=[128, 256, 512])
     p.add_argument("--pred-lens", nargs="+", type=int, default=[1, 12])
     p.add_argument("--samples", nargs="+", type=int, default=[1, 16, 32])
-    p.add_argument("--batch", type=int, default=4, help="windows per call (decision timestamps batched together)")
+    p.add_argument("--batch", type=int, default=8, help="windows per call (decision timestamps batched together)")
+    p.add_argument("--max-batch-rows", type=int, default=128, help="sequences per forward pass (windows x samples); 0 = unlimited")
+    p.add_argument("--vram-headroom-mb", type=int, default=400, help="VRAM left free for the OS; -1 disables the cap")
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--tiny", action="store_true", help="random tiny model, no download (smoke test)")
     p.add_argument("--out", default="reports/kronos_benchmark.csv")

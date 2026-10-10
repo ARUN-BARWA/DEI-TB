@@ -8,12 +8,14 @@ mode: SIGNAL_ONLY
 # variable TRADING_ENABLED is exactly "true". Anything else means no orders.
 trading_enabled: false
 
-# Research focus. All symbols in your trade archives are ingested (DOGEUSD, PEPEUSD, MONUSD,
-# PNUTUSD, ZROUSD too); the volatile leg is chosen from data_store/reports/summary.csv by liquidity.
+# Research focus, chosen from the Phase 2 data-quality report. DOGEUSD is the volatile leg:
+# 1000PEPEUSD, MONUSD, PNUTUSD and ZROUSD trade 186-426 times a day with 80-90% of minutes
+# empty, too thin for systematic research without an order book.
 symbols:
   - BTCUSD
   - ETHUSD
   - SOLUSD
+  - DOGEUSD
 
 # Research timeframes, in the order they will be studied (cheapest Kronos cost first).
 timeframes: [1h, 15m, 4h, 5m, 1m]
@@ -44,3 +46,15 @@ costs:
   taker_fee: 0.0005
   maker_fee: 0.0002
   gst_rate: 0.18
+
+research:
+  # Data: 2026-01-01 -> 2026-09-01 (all after the Kronos pretraining cutoff).
+  data_start: "2026-01-01"
+  first_test_month: "2026-03"   # dev folds test Mar, Apr, May, Jun (expanding train, 1-month validation)
+  holdout_start: "2026-07-01"   # Jul 1 -> Sep 1 is the final holdout: locked, evaluated once
+  data_end: "2026-09-02"
+  val_months: 1
+  embargo: "12h"                # gap between train/val/test on top of label purging
+  horizons: [1, 3, 6, 12, 24]   # in bars of each timeframe
+  triple_barrier_k: 1.0         # barrier half-width = max(k * sigma * sqrt(h), round-trip cost)
+  vol_window: 48

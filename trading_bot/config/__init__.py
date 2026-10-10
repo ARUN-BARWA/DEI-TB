@@ -62,6 +62,22 @@ class CostSettings:
 
 
 @dataclass(frozen=True)
+class ResearchSettings:
+    data_start: str = "2026-01-01"
+    first_test_month: str = "2026-03"
+    holdout_start: str = "2026-07-01"  # final holdout: evaluated once, at the very end
+    data_end: str = "2026-09-02"
+    val_months: int = 1
+    embargo: str = "12h"
+    horizons: tuple[int, ...] = (1, 3, 6, 12, 24)
+    triple_barrier_k: float = 1.0
+    vol_window: int = 48
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "horizons", tuple(int(h) for h in self.horizons))
+
+
+@dataclass(frozen=True)
 class Settings:
     mode: Mode = Mode.SIGNAL_ONLY
     trading_enabled: bool = False
@@ -70,6 +86,7 @@ class Settings:
     data_root: Path = Path("./data_store")
     kronos: KronosSettings = field(default_factory=KronosSettings)
     costs: CostSettings = field(default_factory=CostSettings)
+    research: ResearchSettings = field(default_factory=ResearchSettings)
 
     def orders_allowed(self, env: Mapping[str, str] | None = None) -> bool:
         """True only when the mode can place orders and both kill-switch layers are on."""
@@ -109,4 +126,5 @@ def load_settings(path: str | Path | None = None, env: Mapping[str, str] | None 
         data_root=Path(raw.get("data", {}).get("root", "./data_store")),
         kronos=KronosSettings(**raw.get("kronos", {})),
         costs=CostSettings(**raw.get("costs", {})),
+        research=ResearchSettings(**raw.get("research", {})),
     )

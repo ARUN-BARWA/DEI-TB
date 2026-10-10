@@ -32,6 +32,13 @@ class Store:
     def bars_path(self, symbol: str, tf: str) -> Path:
         return self.root / "bars" / tf / f"{symbol}.parquet"
 
+    def dataset_path(self, symbol: str, tf: str) -> Path:
+        return self.root / "datasets" / tf / f"{symbol}.parquet"
+
+    @property
+    def holdout_audit_log(self) -> Path:
+        return self.root / "holdout_access.log"
+
     @property
     def manifest_path(self) -> Path:
         return self.root / "manifest.json"

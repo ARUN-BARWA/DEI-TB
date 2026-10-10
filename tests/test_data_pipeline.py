@@ -145,6 +145,7 @@ def test_validator_sequence_stats_carry_across_chunks():
     r = v.report()
     assert r["consecutive_duplicates"] == 1
     assert r["isolated_spikes"] == 1
+    assert r["spike_times"] == [pd.Timestamp("2026-09-01 00:00:00.6", tz="UTC").isoformat()]
     assert r["out_of_order"] == 1
     assert r["gaps_over_alert"] == 1 and r["max_gap_s"] == pytest.approx(299.35)
     assert r["sell_to_buy_mean_dp"] == pytest.approx(0.5)

@@ -61,6 +61,24 @@ def resolve_device(device: str | None = "auto") -> str:
     return "cpu"
 
 
+def limit_vram(device: str, headroom_mb: int = 400) -> float | None:
+    """Cap PyTorch's CUDA allocator just below the VRAM that is free right now.
+
+    On Windows, NVIDIA's "CUDA Sysmem Fallback Policy" lets allocations spill into system RAM
+    when VRAM runs out. Instead of an out-of-memory error you get a silent 10-100x slowdown that
+    persists, because PyTorch keeps reusing the spilled cached blocks. With this cap PyTorch
+    raises ``torch.cuda.OutOfMemoryError`` instead. Call before loading models. Returns the
+    fraction of total VRAM allowed, or None on non-CUDA devices.
+    """
+    if not str(device).startswith("cuda"):
+        return None
+    idx = torch.device(device).index or 0
+    free, total = torch.cuda.mem_get_info(idx)
+    fraction = min(0.95, max(0.05, (free - headroom_mb * 2**20) / total))
+    torch.cuda.set_per_process_memory_fraction(fraction, idx)
+    return fraction
+
+
 def future_timestamps(last_ts: pd.Timestamp, freq: str | pd.Timedelta, n: int) -> pd.Series:
     """Timestamps of the next ``n`` bars after ``last_ts`` (crypto trades 24/7, no gaps)."""
     step = pd.Timedelta(freq)
@@ -152,12 +170,18 @@ class KronosWrapper:
         device: str | None = "auto",
         max_context: int = 512,
         clip: float = 5.0,
+        max_batch_rows: int | None = 128,
+        vram_headroom_mb: int | None = 400,
     ) -> None:
+        """``max_batch_rows`` bounds sequences per forward pass (windows x samples) to bound VRAM.
+        ``vram_headroom_mb`` (None disables) applies :func:`limit_vram` before moving models."""
         self.device = resolve_device(device)
+        self.vram_fraction = limit_vram(self.device, vram_headroom_mb) if vram_headroom_mb is not None else None
         self.model = model.to(self.device).eval()
         self.tokenizer = tokenizer.to(self.device).eval()
         self.max_context = max_context
         self.clip = clip
+        self.max_batch_rows = max_batch_rows
 
     @classmethod
     def from_pretrained(
@@ -167,13 +191,18 @@ class KronosWrapper:
         device: str | None = "auto",
         max_context: int | None = None,
         clip: float = 5.0,
+        **kwargs,
     ) -> "KronosWrapper":
+        device = resolve_device(device)
+        if kwargs.get("vram_headroom_mb", 400) is not None:
+            limit_vram(device, kwargs.get("vram_headroom_mb", 400))  # before weights reach the GPU
         model = Kronos.from_pretrained(model_id)
         tokenizer = KronosTokenizer.from_pretrained(tokenizer_id)
         if max_context is None:
             name = model_id.rstrip("/").split("/")[-1]
             max_context = MAX_CONTEXT.get(name, 512)
-        return cls(model, tokenizer, device=device, max_context=max_context, clip=clip)
+        kwargs["vram_headroom_mb"] = None  # already applied
+        return cls(model, tokenizer, device=device, max_context=max_context, clip=clip, **kwargs)
 
     # ------------------------------------------------------------------ forecasting
 
@@ -189,13 +218,15 @@ class KronosWrapper:
         top_k: int = 0,
         top_p: float = 0.9,
         seed: int | None = None,
-        max_batch: int | None = None,
+        max_batch: int | None | str = "default",
     ) -> np.ndarray:
         """Return sampled paths in price space, shape (B, n_samples, pred_len, 6).
 
         Rows are laid out exactly as upstream lays out ``sample_count`` copies (sample index
         fastest), so with the same seed the mean over our paths equals upstream ``predict``
-        with ``sample_count=n_samples``.
+        with ``sample_count=n_samples`` (when everything fits in one batch, ``max_batch=None``).
+        ``max_batch`` defaults to ``self.max_batch_rows``; pass ``max_batch=None`` explicitly
+        only for small inputs.
         """
         if any(len(df) > self.max_context for df in dfs):
             raise ValueError(f"window longer than max_context={self.max_context}; truncate it to the lookback first")
@@ -214,7 +245,9 @@ class KronosWrapper:
         if seed is not None:
             torch.manual_seed(seed)
         rows = x.shape[0]
-        step = rows if max_batch is None else max(1, max_batch)
+        if max_batch == "default":
+            max_batch = self.max_batch_rows
+        step = rows if max_batch is None else max(1, int(max_batch))
         out = []
         for start in range(0, rows, step):
             sl = slice(start, start + step)
@@ -244,25 +277,30 @@ class KronosWrapper:
         if any(len(df) > self.max_context for df in dfs):
             raise ValueError(f"window longer than max_context={self.max_context}")
         prep = prepare_windows(dfs, x_timestamps, clip=self.clip)
-        x = torch.from_numpy(prep.x).to(self.device)
-        stamp = torch.from_numpy(prep.x_stamp).to(self.device)
+        step = len(dfs) if self.max_batch_rows is None else max(1, self.max_batch_rows)
+        parts: list[tuple[np.ndarray, ...]] = []
+        for start in range(0, len(dfs), step):
+            sl = slice(start, start + step)
+            x = torch.from_numpy(prep.x[sl]).to(self.device)
+            stamp = torch.from_numpy(prep.x_stamp[sl]).to(self.device)
 
-        s1_ids, s2_ids = self.tokenizer.encode(x, half=True)
-        s1_logits, hidden = self.model.decode_s1(s1_ids, s2_ids, stamp)
+            s1_ids, s2_ids = self.tokenizer.encode(x, half=True)
+            s1_logits, hidden = self.model.decode_s1(s1_ids, s2_ids, stamp)
 
-        logp = F.log_softmax(s1_logits[:, -1, :].float(), dim=-1)
-        entropy = -(logp.exp() * logp).sum(-1) / np.log(logp.shape[-1])
+            logp = F.log_softmax(s1_logits[:, -1, :].float(), dim=-1)
+            entropy = -(logp.exp() * logp).sum(-1) / np.log(logp.shape[-1])
 
-        recon = self.tokenizer.decode([s1_ids, s2_ids], half=True)
-        k = min(pool, x.shape[1])
-        recon_err = ((recon[:, -k:, :] - x[:, -k:, :]) ** 2).mean(dim=(1, 2))
-
-        return KronosEmbedding(
-            hidden_last=hidden[:, -1, :].float().cpu().numpy(),
-            hidden_mean=hidden[:, -k:, :].mean(dim=1).float().cpu().numpy(),
-            s1_entropy=entropy.cpu().numpy(),
-            recon_error=recon_err.float().cpu().numpy(),
-        )
+            recon = self.tokenizer.decode([s1_ids, s2_ids], half=True)
+            k = min(pool, x.shape[1])
+            recon_err = ((recon[:, -k:, :] - x[:, -k:, :]) ** 2).mean(dim=(1, 2))
+            parts.append((
+                hidden[:, -1, :].float().cpu().numpy(),
+                hidden[:, -k:, :].mean(dim=1).float().cpu().numpy(),
+                entropy.cpu().numpy(),
+                recon_err.float().cpu().numpy(),
+            ))
+        last, mean, ent, rec = (np.concatenate(cols) for cols in zip(*parts))
+        return KronosEmbedding(hidden_last=last, hidden_mean=mean, s1_entropy=ent, recon_error=rec)
 
 
 # ---------------------------------------------------------------------- path statistics

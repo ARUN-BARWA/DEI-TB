@@ -132,6 +132,7 @@ class TradeValidator:
     out_of_order: int = 0
     consecutive_duplicates: int = 0
     isolated_spikes: int = 0
+    spike_times_us: list = field(default_factory=list)  # first 50, for inspection
     gaps_over_alert: int = 0
     max_gap_s: float = 0.0
     max_gap_at_us: int | None = None
@@ -230,6 +231,9 @@ class TradeValidator:
             r_in, r_out = r[:-1], r[1:]
             spike = (np.abs(r_in) > self.spike_threshold) & (np.abs(r_out) > self.spike_threshold) & (np.sign(r_in) != np.sign(r_out))
             self.isolated_spikes += int(spike.sum())
+            room = 50 - len(self.spike_times_us)
+            if room > 0 and spike.any():
+                self.spike_times_us.extend(cts[1:-1][spike][:room].tolist())
 
         self._tail = comb.iloc[-2:].reset_index(drop=True)
         return good
@@ -252,6 +256,7 @@ class TradeValidator:
             "out_of_order": self.out_of_order,
             "consecutive_duplicates": self.consecutive_duplicates,
             "isolated_spikes": self.isolated_spikes,
+            "spike_times": [iso(t) for t in self.spike_times_us],
             "gaps_over_alert": self.gaps_over_alert,
             "max_gap_s": round(self.max_gap_s, 3),
             "max_gap_at": iso(self.max_gap_at_us),

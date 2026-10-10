@@ -7,7 +7,7 @@
 | Source | Delta "futures-trades-monthly" exports, one zip per symbol-month |
 | Schema | `product_symbol, price, size, timestamp, buyer_role` (tick trades) |
 | Symbols | BTCUSD, ETHUSD, SOLUSD, DOGEUSD, PEPEUSD, MONUSD, PNUTUSD, ZROUSD |
-| Period | 2026-01 → 2026-09 (9 months, ~70 files) |
+| Period | 2026-01-01 → 2026-09-01 (the September file holds one day; ~8 months) |
 | Not included | order book, funding, open interest, mark/index price, liquidations |
 
 Consequences for the research plan:
@@ -20,8 +20,8 @@ Consequences for the research plan:
    - an **effective-spread estimate from Delta's own prints**, which calibrates the cost model to the venue we will
      trade.
 3. **Only 9 months of history.** This is the main statistical limitation:
-   - The proposed split is walk-forward folds inside 2026-01 → 2026-07 for development, with **2026-08 → 2026-09
-     held out and touched once.** Data you collect after September adds forward test months.
+   - Walk-forward folds test March–June for development; **2026-07-01 → 2026-09-01 is the holdout, touched once**
+     (see `docs/03_research_dataset.md`). Data you collect after September adds forward test months.
    - At 1h that is only ~6,500 bars per symbol, so lower timeframes (5m/15m) carry most of the statistical power,
      but they also carry more cost.
    - **Recommendation:** add free Binance USDⓈ-M data (data.binance.vision: klines + aggTrades with aggressor flag,
