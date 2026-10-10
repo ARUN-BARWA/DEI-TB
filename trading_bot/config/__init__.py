@@ -51,6 +51,8 @@ class CostSettings:
     taker_fee: float = 0.0005
     maker_fee: float = 0.0002
     gst_rate: float = 0.18
+    # Funding history is not in the data yet: charge this to every position, long or short (conservative).
+    funding_assumed_per_8h: float = 0.0001
 
     @property
     def taker_fee_effective(self) -> float:

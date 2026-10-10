@@ -36,6 +36,10 @@ class Store:
         return self.root / "datasets" / tf / f"{symbol}.parquet"
 
     @property
+    def experiments_path(self) -> Path:
+        return self.root / "experiments" / "experiments.csv"
+
+    @property
     def holdout_audit_log(self) -> Path:
         return self.root / "holdout_access.log"
 

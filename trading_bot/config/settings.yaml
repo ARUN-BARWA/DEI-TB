@@ -46,6 +46,8 @@ costs:
   taker_fee: 0.0005
   maker_fee: 0.0002
   gst_rate: 0.18
+  # No funding history in the data yet: 1 bp per 8h charged to every position, either side.
+  funding_assumed_per_8h: 0.0001
 
 research:
   # Data: 2026-01-01 -> 2026-09-01 (all after the Kronos pretraining cutoff).

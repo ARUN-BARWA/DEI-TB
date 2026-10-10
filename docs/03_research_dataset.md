@@ -7,7 +7,7 @@
 | Clock | Best alignment with Binance at shift 0 (corr 0.973; ±330 min ≈ 0) | Timestamps are UTC. No correction needed |
 | Aggressor side | `aggressor_ok = True` for all 8 symbols | `buyer_role` mapping confirmed; order-flow features are valid |
 | Coverage | Every symbol ends **2026-09-01 23:59**: the September file holds one day | Usable data is 2026-01-01 → 2026-09-01. Holdout = **Jul 1 → Sep 1** |
-| Gaps | BTC/ETH/SOL/DOGE/PEPE each have 5 segments (4 trade gaps > 6h) | Missing data, not quiet markets (BTC trades ~290k times a day). No window crosses them |
+| Gaps | BTC/ETH/SOL/DOGE/PEPE each have 5 segments: whole UTC days missing on Mar 20, May 11, Jun 24 and Jul 27–31 (all weekdays) | Days missing from the export, not quiet markets (BTC trades ~290k times a day). No window crosses them |
 | Liquidity | BTC 290k, ETH 204k, SOL 42k, DOGE 3.8k trades/day. PEPE/MON/PNUT/ZRO 186–426/day with 80–90% empty minutes | Research symbols: **BTCUSD, ETHUSD, SOLUSD, DOGEUSD**. The four small caps are too thin without an order book |
 | Costs | Spread proxy: BTC 0.14, ETH 0.47, SOL 1.24, DOGE 2.43 bp. Taker round trip 11.9–14.2 bp | Fees, not spread, dominate for BTC/ETH. The median 1-minute BTC move is 2.5 bp, about 1/5 of a round trip |
 | Spikes | ETH 359 single-trade ≥1% excursions that revert at once (BTC 7, SOL 51) | They are real prints but would trigger last-price stops. The validator now records their timestamps (re-run ingest with `--force` to see them). The backtester will need a stop-trigger price that models Delta's mark-price option |

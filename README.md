@@ -10,6 +10,7 @@ in this repository can place an order yet.
 - Phase 1 (Kronos study): [`docs/01_kronos_study.md`](docs/01_kronos_study.md)
 - Phase 2 (tick data pipeline): [`docs/02_data_pipeline.md`](docs/02_data_pipeline.md)
 - Phase 3 (features, labels, splits): [`docs/03_research_dataset.md`](docs/03_research_dataset.md), [`docs/features.md`](docs/features.md)
+- Phase 4 (cost-aware baselines): [`docs/04_baselines.md`](docs/04_baselines.md)
 
 ## Setup
 
@@ -59,6 +60,16 @@ Re-running `ingest_trades.py` only processes new or changed files (`--force` re-
 python scripts/build_dataset.py            # symbols x timeframes from settings.yaml
 # -> data_store/datasets/<tf>/<SYMBOL>.parquet, data_store/reports/cost_hurdle.csv, folds.csv
 python scripts/gen_feature_docs.py         # after adding/changing a feature (a test checks docs/features.md)
+```
+
+## Phase 4: baselines
+
+```bash
+pip install -r requirements.txt            # adds scikit-learn, lightgbm
+python scripts/run_baselines.py            # 5m, 15m, 1h, 4h; development folds only
+python scripts/run_baselines.py --delay 1  # robustness: enter one bar late
+# -> data_store/reports/baselines/<run_id>/{summary,grid,folds}.csv + trades.parquet
+#    and data_store/experiments/experiments.csv
 ```
 
 ## Safety
