@@ -11,6 +11,7 @@ in this repository can place an order yet.
 - Phase 2 (tick data pipeline): [`docs/02_data_pipeline.md`](docs/02_data_pipeline.md)
 - Phase 3 (features, labels, splits): [`docs/03_research_dataset.md`](docs/03_research_dataset.md), [`docs/features.md`](docs/features.md)
 - Phase 4 (cost-aware baselines): [`docs/04_baselines.md`](docs/04_baselines.md), results and next steps: [`docs/04b_baseline_findings.md`](docs/04b_baseline_findings.md)
+- Phase 5 (Kronos vs baselines): [`docs/05_kronos_comparison.md`](docs/05_kronos_comparison.md)
 
 ## Setup
 
@@ -79,6 +80,15 @@ python scripts/fetch_binance.py --dest path/to/binance     # SHA-256 verified do
 python scripts/ingest_binance.py --src path/to/binance     # combined BTC/ETH/SOL/DOGE series (Binance, then Delta)
 python scripts/build_dataset.py --symbols BTC ETH SOL DOGE --timeframes 1h 4h 15m
 python scripts/run_baselines.py --symbols BTC ETH SOL DOGE --timeframes 1h 4h [--lag-minutes 2]
+```
+
+## Phase 5: Kronos vs baselines
+
+```bash
+python scripts/kronos_features.py --model NeoQuasar/Kronos-small --timeframes 4h 1h           # embeddings (~25 min)
+python scripts/kronos_features.py --model NeoQuasar/Kronos-mini --timeframes 4h 1h --paths    # + sampled paths (hours)
+python scripts/kronos_calibration.py --kronos-tag Kronos-mini_paths                          # forecast quality
+python scripts/run_kronos_comparison.py --kronos-tag Kronos-small_emb [--extend] [--lag-minutes 2]
 ```
 
 ## Safety

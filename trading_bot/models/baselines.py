@@ -53,14 +53,26 @@ class Constant(Model):
 
 
 class Rule(Model):
-    def __init__(self, name: str, fn: Callable[[pd.DataFrame], pd.Series], description: str) -> None:
-        self.name, self.fn, self.description = name, fn, description
+    """A fixed formula. With ``learn_sign`` its direction (+1 trend-following / -1 contrarian) is the sign of
+    its Spearman correlation with the forward return on the training rows of each fold, never test."""
+
+    def __init__(self, name: str, fn: Callable[[pd.DataFrame], pd.Series], description: str, learn_sign: bool = False) -> None:
+        self.name, self.fn, self.description, self.learn_sign = name, fn, description, learn_sign
+        self.sign = 1.0
+
+    def fit(self, train, val, h):
+        if self.learn_sign:
+            s = pd.Series(np.asarray(self.fn(train), dtype=float), index=train.index)
+            ok = s.notna() & train[f"y_ret_{h}"].notna()
+            rho = s[ok].rank().corr(train.loc[ok, f"y_ret_{h}"].rank()) if ok.sum() > 30 else 0.0
+            self.sign = -1.0 if rho < 0 else 1.0
+        return self
 
     def predict(self, frame):
-        return np.asarray(self.fn(frame), dtype=float)
+        return self.sign * np.asarray(self.fn(frame), dtype=float)
 
     def params(self):
-        return {"rule": self.description}
+        return {"rule": self.description, "learn_sign": self.learn_sign}
 
 
 def rule_baselines() -> list[Model]:
@@ -71,6 +83,16 @@ def rule_baselines() -> list[Model]:
         Rule("momentum_48", lambda d: d["ret_48"] / (d["rv_48"] * np.sqrt(48)), "ret_48 / (rv_48 sqrt 48)"),
         Rule("mean_reversion_24", lambda d: -d["zclose_24"], "-zclose_24"),
         Rule("order_flow_24", lambda d: d["flow_imb_24"], "flow_imb_24"),
+    ]
+
+
+def signed_rule_baselines() -> list[Model]:
+    """Rules whose direction is learned on each fold's training rows (trend vs reversal is not assumed)."""
+    return [
+        Rule("trend_12_sf", lambda d: d["ret_12"] / (d["rv_48"] * np.sqrt(12)), "ret_12 / (rv_48 sqrt 12)", learn_sign=True),
+        Rule("trend_48_sf", lambda d: d["ret_48"] / (d["rv_48"] * np.sqrt(48)), "ret_48 / (rv_48 sqrt 48)", learn_sign=True),
+        Rule("zclose_24_sf", lambda d: d["zclose_24"], "zclose_24", learn_sign=True),
+        Rule("flow_24_sf", lambda d: d["flow_imb_24"], "flow_imb_24", learn_sign=True),
     ]
 
 
@@ -212,4 +234,5 @@ class LGBMBarrier(_Tabular):
 
 
 def all_baselines(features: list[str]) -> list[Model]:
-    return rule_baselines() + [RidgeReturn(features), LogisticBarrier(features), LGBMReturn(features), LGBMBarrier(features)]
+    return (rule_baselines() + signed_rule_baselines()
+            + [RidgeReturn(features), LogisticBarrier(features), LGBMReturn(features), LGBMBarrier(features)])

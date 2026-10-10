@@ -55,6 +55,7 @@ def run_walk_forward(
     log: Callable[[str], None] = print,
     price_lookups: dict | None = None,
     lag_minutes: int = 0,
+    extend: bool = False,
 ) -> WalkForwardResult:
     """``price_lookups`` (symbol -> ``evaluate.minute_price_lookup``) with ``lag_minutes`` prices trades
     from 1-minute bars N minutes after the decision (latency / bid-ask-bounce test)."""
@@ -66,7 +67,7 @@ def run_walk_forward(
     fold_rows, trade_frames, test_days = [], [], {}
 
     for h in horizons:
-        rules = {s: TradeRules(h, costs[s], funding_per_8h / bars_per_8h, delay, lag_minutes) for s in datasets}
+        rules = {s: TradeRules(h, costs[s], funding_per_8h / bars_per_8h, delay, lag_minutes, extend) for s in datasets}
         lookups = price_lookups or {}
         for fold in folds:
             masks = {s: fold_masks(d["decision_time"], d[f"label_end_{h}"], fold, embargo) for s, d in datasets.items()}

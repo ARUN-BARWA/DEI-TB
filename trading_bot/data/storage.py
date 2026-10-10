@@ -35,6 +35,12 @@ class Store:
     def dataset_path(self, symbol: str, tf: str) -> Path:
         return self.root / "datasets" / tf / f"{symbol}.parquet"
 
+    def kronos_path(self, tag: str, tf: str, symbol: str) -> Path:
+        return self.root / "kronos" / tag / tf / f"{symbol}.parquet"
+
+    def kronos_chunks_dir(self, tag: str, tf: str, symbol: str, lookback: int) -> Path:
+        return self.root / "kronos" / tag / tf / f"_chunks_L{lookback}" / symbol
+
     @property
     def experiments_path(self) -> Path:
         return self.root / "experiments" / "experiments.csv"

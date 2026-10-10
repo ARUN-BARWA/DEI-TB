@@ -34,6 +34,7 @@ class TradeRules:
     funding_per_bar: float = 0.0  # assumed funding charged per bar held, any side
     delay: int = 0  # bars between decision and entry (latency robustness)
     lag_minutes: int = 0  # extra minutes before entry and exit (needs a 1-minute price lookup)
+    extend: bool = False  # at each scheduled exit, keep the position (no new round trip) if the signal still agrees
 
 
 def minute_price_lookup(minute_bars: pd.DataFrame):
@@ -88,9 +89,19 @@ def simulate_trades(frame: pd.DataFrame, scores: np.ndarray, theta: float, rules
         if not (np.isfinite(px[e]) and np.isfinite(px[x])):
             continue
         side = 1.0 if s[i] > 0 else -1.0
+        if rules.extend:
+            # Decision at the scheduled exit bar x uses only information at x: same direction and above
+            # threshold -> hold another h bars instead of closing and re-opening (saves a round trip).
+            while True:
+                nx = x + rules.h
+                if not (ok[x] and np.sign(s[x]) == side and nx < n and seg[nx] == seg[i] and np.isfinite(px[nx])):
+                    break
+                if max_exit_time is not None and dtime[nx] + lag > max_exit_time:
+                    break
+                x = nx
         gross = side * (np.log(px[x]) - np.log(px[e]))
-        net = gross - rules.round_trip_cost - rules.funding_per_bar * rules.h
-        rows.append((symbol, dtime[e] + lag, dtime[x] + lag, side, gross, net, rules.h))
+        net = gross - rules.round_trip_cost - rules.funding_per_bar * (x - e)
+        rows.append((symbol, dtime[e] + lag, dtime[x] + lag, side, gross, net, x - e))
         next_free = x
     return pd.DataFrame(rows, columns=TRADE_COLUMNS)
 

@@ -140,6 +140,19 @@ def prepare_windows(dfs: Sequence[pd.DataFrame], timestamps: Sequence[pd.Series]
     )
 
 
+def normalize_windows(raw: np.ndarray, clip: float = 5.0) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Vectorised ``prepare_windows`` for arrays: raw (B, T, 6) -> (x_norm, mean (B, 6), std (B, 6))."""
+    raw = np.asarray(raw, dtype=np.float32)
+    mean, std = raw.mean(axis=1), raw.std(axis=1)
+    x = np.clip((raw - mean[:, None, :]) / (std[:, None, :] + 1e-5), -clip, clip).astype(np.float32)
+    return x, mean, std
+
+
+def time_stamps(index: pd.DatetimeIndex) -> np.ndarray:
+    """Kronos temporal features (minute, hour, weekday, day, month) for each timestamp, float32 (n, 5)."""
+    return calc_time_stamps(pd.Series(pd.DatetimeIndex(index))).to_numpy(dtype=np.float32)
+
+
 @contextlib.contextmanager
 def force_causal_dependency_layer(model: Kronos) -> Iterator[None]:
     """Make the s2 cross-attention causal in eval mode without enabling dropout.
@@ -237,9 +250,33 @@ class KronosWrapper:
         if y_stamp.shape[1] != pred_len:
             raise ValueError(f"y_timestamps length {y_stamp.shape[1]} != pred_len {pred_len}")
 
-        b = prep.x.shape[0]
-        x = np.repeat(prep.x, n_samples, axis=0)
-        xs = np.repeat(prep.x_stamp, n_samples, axis=0)
+        return self.sample_paths_prepared(prep.x, prep.x_stamp, y_stamp, prep.mean, prep.std, pred_len, n_samples,
+                                          temperature, top_k, top_p, seed, max_batch)
+
+    @torch.no_grad()
+    def sample_paths_prepared(
+        self,
+        x_norm: np.ndarray,
+        x_stamp: np.ndarray,
+        y_stamp: np.ndarray,
+        mean: np.ndarray,
+        std: np.ndarray,
+        pred_len: int,
+        n_samples: int = 16,
+        temperature: float = 1.0,
+        top_k: int = 0,
+        top_p: float = 0.9,
+        seed: int | None = None,
+        max_batch: int | None | str = "default",
+    ) -> np.ndarray:
+        """``sample_paths`` on already-normalised arrays (see ``normalize_windows``, ``time_stamps``)."""
+        if x_norm.shape[1] > self.max_context:
+            raise ValueError(f"window longer than max_context={self.max_context}")
+        if y_stamp.shape[1] != pred_len:
+            raise ValueError(f"y_stamp length {y_stamp.shape[1]} != pred_len {pred_len}")
+        b = x_norm.shape[0]
+        x = np.repeat(x_norm, n_samples, axis=0)
+        xs = np.repeat(x_stamp, n_samples, axis=0)
         ys = np.repeat(y_stamp, n_samples, axis=0)
 
         if seed is not None:
@@ -267,7 +304,7 @@ class KronosWrapper:
             )
             out.append(preds[:, -pred_len:, :])
         paths = np.concatenate(out, axis=0).reshape(b, n_samples, pred_len, len(FEATURE_COLS))
-        return paths * (prep.std[:, None, None, :] + 1e-5) + prep.mean[:, None, None, :]
+        return paths * (std[:, None, None, :] + 1e-5) + mean[:, None, None, :]
 
     # ------------------------------------------------------------------ representations
 
@@ -277,12 +314,20 @@ class KronosWrapper:
         if any(len(df) > self.max_context for df in dfs):
             raise ValueError(f"window longer than max_context={self.max_context}")
         prep = prepare_windows(dfs, x_timestamps, clip=self.clip)
-        step = len(dfs) if self.max_batch_rows is None else max(1, self.max_batch_rows)
+        return self.embed_prepared(prep.x, prep.x_stamp, pool)
+
+    @torch.no_grad()
+    def embed_prepared(self, x_norm: np.ndarray, x_stamp: np.ndarray, pool: int = 8) -> KronosEmbedding:
+        """``embed`` on already-normalised arrays (see ``normalize_windows``, ``time_stamps``)."""
+        if x_norm.shape[1] > self.max_context:
+            raise ValueError(f"window longer than max_context={self.max_context}")
+        n = x_norm.shape[0]
+        step = n if self.max_batch_rows is None else max(1, self.max_batch_rows)
         parts: list[tuple[np.ndarray, ...]] = []
-        for start in range(0, len(dfs), step):
+        for start in range(0, n, step):
             sl = slice(start, start + step)
-            x = torch.from_numpy(prep.x[sl]).to(self.device)
-            stamp = torch.from_numpy(prep.x_stamp[sl]).to(self.device)
+            x = torch.from_numpy(np.ascontiguousarray(x_norm[sl])).to(self.device)
+            stamp = torch.from_numpy(np.ascontiguousarray(x_stamp[sl])).to(self.device)
 
             s1_ids, s2_ids = self.tokenizer.encode(x, half=True)
             s1_logits, hidden = self.model.decode_s1(s1_ids, s2_ids, stamp)

@@ -15,5 +15,6 @@ tqdm
 # Research models
 scikit-learn
 lightgbm
+scipy
 # Dev
 pytest
