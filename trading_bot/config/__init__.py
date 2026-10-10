@@ -80,6 +80,15 @@ class ResearchSettings:
 
 
 @dataclass(frozen=True)
+class CombinedSettings:
+    """Research series per coin: Binance USD-M history before ``switch``, Delta trades from it."""
+
+    switch: str = "2026-01-01"
+    binance_start: str = "2024-07"
+    symbols: dict = field(default_factory=dict)  # name -> {"binance": ..., "delta": ...}
+
+
+@dataclass(frozen=True)
 class Settings:
     mode: Mode = Mode.SIGNAL_ONLY
     trading_enabled: bool = False
@@ -89,6 +98,11 @@ class Settings:
     kronos: KronosSettings = field(default_factory=KronosSettings)
     costs: CostSettings = field(default_factory=CostSettings)
     research: ResearchSettings = field(default_factory=ResearchSettings)
+    combined: CombinedSettings = field(default_factory=CombinedSettings)
+
+    def delta_symbol(self, symbol: str) -> str:
+        """The Delta product a research symbol trades as (its costs come from that product's report)."""
+        return self.combined.symbols.get(symbol, {}).get("delta", symbol)
 
     def orders_allowed(self, env: Mapping[str, str] | None = None) -> bool:
         """True only when the mode can place orders and both kill-switch layers are on."""
@@ -129,4 +143,5 @@ def load_settings(path: str | Path | None = None, env: Mapping[str, str] | None 
         kronos=KronosSettings(**raw.get("kronos", {})),
         costs=CostSettings(**raw.get("costs", {})),
         research=ResearchSettings(**raw.get("research", {})),
+        combined=CombinedSettings(**raw.get("combined", {})),
     )

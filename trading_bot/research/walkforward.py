@@ -22,6 +22,7 @@ from trading_bot.research.dataset import feature_columns
 from trading_bot.research.evaluate import (
     TradeRules,
     choose_threshold,
+    ic_t_stat,
     information_coefficient,
     simulate_trades,
     t_stat,
@@ -52,7 +53,11 @@ def run_walk_forward(
     funding_per_8h: float = 0.0,
     delay: int = 0,
     log: Callable[[str], None] = print,
+    price_lookups: dict | None = None,
+    lag_minutes: int = 0,
 ) -> WalkForwardResult:
+    """``price_lookups`` (symbol -> ``evaluate.minute_price_lookup``) with ``lag_minutes`` prices trades
+    from 1-minute bars N minutes after the decision (latency / bid-ask-bounce test)."""
     if any(f.is_holdout for f in folds):
         raise ValueError("walk-forward research runs on development folds only; the holdout is evaluated separately")
     features = sorted(set.intersection(*(set(feature_columns(d)) for d in datasets.values())))
@@ -61,7 +66,8 @@ def run_walk_forward(
     fold_rows, trade_frames, test_days = [], [], {}
 
     for h in horizons:
-        rules = {s: TradeRules(h, costs[s], funding_per_8h / bars_per_8h, delay) for s in datasets}
+        rules = {s: TradeRules(h, costs[s], funding_per_8h / bars_per_8h, delay, lag_minutes) for s in datasets}
+        lookups = price_lookups or {}
         for fold in folds:
             masks = {s: fold_masks(d["decision_time"], d[f"label_end_{h}"], fold, embargo) for s, d in datasets.items()}
             train, val = _pool(datasets, masks, "train"), _pool(datasets, masks, "val")
@@ -75,7 +81,8 @@ def run_walk_forward(
                 model.fit(train, val, h)
                 scores = {s: model.predict(d) for s, d in datasets.items()}
                 val_masks = {s: masks[s]["val"] for s in datasets}
-                theta, val_t = choose_threshold(datasets, scores, val_masks, rules, fold.test_start - emb)
+                theta, val_t = choose_threshold(datasets, scores, val_masks, rules, fold.test_start - emb,
+                                                price_lookups=lookups)
                 if model.reference:
                     theta = 0.0  # drift benchmark: trade every opportunity, report it whatever validation said
                 row = {"model": model.name, "tf": tf, "h": h, "fold": fold.name, "theta": theta, "val_t": round(val_t, 2),
@@ -84,10 +91,11 @@ def run_walk_forward(
                     s_all = np.concatenate([scores[s][masks[s][part]] for s in datasets])
                     y_all = np.concatenate([d.loc[masks[s][part], f"y_ret_{h}"].to_numpy() for s, d in datasets.items()])
                     row[f"ic_{part}"], row[f"rank_ic_{part}"] = (round(v, 4) for v in information_coefficient(s_all, y_all))
+                    row[f"n_{part}"] = int((np.isfinite(s_all) & np.isfinite(y_all)).sum())
                 fold_rows.append(row)
                 for part, end in (("val", fold.test_start - emb), ("test", fold.test_end)):
                     for s, d in datasets.items():
-                        t = simulate_trades(d, scores[s], theta, rules[s], masks[s][part], end, symbol=s)
+                        t = simulate_trades(d, scores[s], theta, rules[s], masks[s][part], end, symbol=s, price_at=lookups.get(s))
                         if not t.empty:
                             trade_frames.append(t.assign(model=model.name, tf=tf, h=h, fold=fold.name, part=part))
             log(f"  {tf} h={h} {fold.name}: done")
@@ -107,8 +115,10 @@ def summarize(result: WalkForwardResult, symbols: list[str]) -> tuple[pd.DataFra
     for (model, tf, h), g in folds.groupby(["model", "tf", "h"], sort=False):
         tt = test[(test["model"] == model) & (test["tf"] == tf) & (test["h"] == h)]
         vv = val[(val["model"] == model) & (val["tf"] == tf) & (val["h"] == h)]
+        ic_pooled = float((g["ic_test"] * g["n_test"]).sum() / max(g["n_test"].sum(), 1)) if g["ic_test"].notna().any() else float("nan")
         base = {"model": model, "tf": tf, "h": h,
                 "ic_test": round(g["ic_test"].mean(), 4), "rank_ic_test": round(g["rank_ic_test"].mean(), 4),
+                "ic_test_t": round(ic_t_stat(ic_pooled, int(g["n_test"].sum()), int(h)), 2),
                 "ic_val": round(g["ic_val"].mean(), 4), "folds_abstained": int(g["abstain"].sum()),
                 "val_t_pooled": round(t_stat(vv["net"].to_numpy()), 2) if len(vv) else 0.0}
         fold_means = tt.groupby("fold")["net"].mean()

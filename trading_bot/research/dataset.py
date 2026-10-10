@@ -18,7 +18,10 @@ META_COLUMNS = ["decision_time", "segment_id", "is_filled", "close"]
 
 
 def round_trip_cost(store: Store, symbol: str, costs: CostSettings) -> float:
-    """Taker fee in and out (incl. GST) + median effective-spread proxy from the ingest report."""
+    """Taker fee in and out (incl. GST) + median effective-spread proxy from ``symbol``'s Delta ingest report.
+
+    Pass the Delta product (``Settings.delta_symbol``) for combined research series.
+    """
     spread_bp = 0.0
     report = store.reports_dir / f"{symbol}.json"
     if report.exists():

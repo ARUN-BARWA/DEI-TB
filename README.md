@@ -10,7 +10,7 @@ in this repository can place an order yet.
 - Phase 1 (Kronos study): [`docs/01_kronos_study.md`](docs/01_kronos_study.md)
 - Phase 2 (tick data pipeline): [`docs/02_data_pipeline.md`](docs/02_data_pipeline.md)
 - Phase 3 (features, labels, splits): [`docs/03_research_dataset.md`](docs/03_research_dataset.md), [`docs/features.md`](docs/features.md)
-- Phase 4 (cost-aware baselines): [`docs/04_baselines.md`](docs/04_baselines.md)
+- Phase 4 (cost-aware baselines): [`docs/04_baselines.md`](docs/04_baselines.md), results and next steps: [`docs/04b_baseline_findings.md`](docs/04b_baseline_findings.md)
 
 ## Setup
 
@@ -70,6 +70,15 @@ python scripts/run_baselines.py            # 5m, 15m, 1h, 4h; development folds 
 python scripts/run_baselines.py --delay 1  # robustness: enter one bar late
 # -> data_store/reports/baselines/<run_id>/{summary,grid,folds}.csv + trades.parquet
 #    and data_store/experiments/experiments.csv
+```
+
+## Longer history (free Binance USD-M klines, Jul 2024 -> Dec 2025)
+
+```bash
+python scripts/fetch_binance.py --dest path/to/binance     # SHA-256 verified downloads
+python scripts/ingest_binance.py --src path/to/binance     # combined BTC/ETH/SOL/DOGE series (Binance, then Delta)
+python scripts/build_dataset.py --symbols BTC ETH SOL DOGE --timeframes 1h 4h 15m
+python scripts/run_baselines.py --symbols BTC ETH SOL DOGE --timeframes 1h 4h [--lag-minutes 2]
 ```
 
 ## Safety

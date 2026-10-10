@@ -37,15 +37,25 @@ def minute_bars_to_frame(minute_bars: pd.DataFrame) -> pd.DataFrame:
     return out.sort_index()
 
 
-def complete_minute_bars(trade_minutes: pd.DataFrame, max_gap: str | pd.Timedelta = "6h") -> pd.DataFrame:
-    """Fill empty minutes inside segments; split segments at trade gaps longer than ``max_gap``."""
+def complete_minute_bars(trade_minutes: pd.DataFrame, max_gap: str | pd.Timedelta = "6h",
+                         breaks: list | None = None) -> pd.DataFrame:
+    """Fill empty minutes inside segments; split segments at trade gaps longer than ``max_gap``.
+
+    ``breaks``: extra times at which a new segment must start even without a gap (e.g. a switch of
+    data source), so no feature or label window mixes the two sides.
+    """
     if trade_minutes.empty:
         raise ValueError("no bars")
     if not trade_minutes.index.is_unique:
         raise ValueError("duplicate minute bars; merge partial bars before completing")
     df = trade_minutes.sort_index()
-    gap = df.index.to_series().diff() > pd.Timedelta(max_gap)
-    seg = gap.cumsum().astype(np.int64)
+    idx = df.index.to_series()
+    new_seg = idx.diff() > pd.Timedelta(max_gap)
+    for b in breaks or []:
+        b = pd.Timestamp(b)
+        b = b.tz_localize("UTC") if b.tzinfo is None else b
+        new_seg |= (idx >= b) & (idx.shift(1) < b)
+    seg = new_seg.cumsum().astype(np.int64)
 
     pieces = []
     for seg_id, part in df.groupby(seg.to_numpy(), sort=True):

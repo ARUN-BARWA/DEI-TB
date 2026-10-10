@@ -39,7 +39,7 @@ def main() -> None:
     folds = monthly_folds(rs.data_start, rs.first_test_month, rs.holdout_start, rs.data_end, rs.val_months)
     hurdles, fold_rows = [], []
     for sym in args.symbols:
-        cost = round_trip_cost(store, sym, settings.costs)
+        cost = round_trip_cost(store, settings.delta_symbol(sym), settings.costs)
         path = store.load_bars(sym, "1m")
         for tf in args.timeframes:
             t0 = time.time()
